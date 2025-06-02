@@ -1,0 +1,44 @@
+# Dépendances
+/node_modules
+/dist
+
+# Environnement
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Fichiers de build
+/build
+/coverage
+
+# Fichiers temporaires
+.tmp
+.temp
+
+# Prisma
+/prisma/migrations/*
+!/prisma/migrations/.gitkeep
+
+# Fichiers d'éditeur
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Fichiers système
+.DS_Store
+Thumbs.db 

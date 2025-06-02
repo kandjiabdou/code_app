@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Application {
+  id                Int                @id @default(autoincrement())
+  nomApplication    String
+  nomRessourceCloud String
+  hasSousApp       Boolean            @default(false)
+  sousApplications  SousApplication[]
+  environnements    Environnement[]
+  composants       Composant[]
+
+  @@map("applications")
+}
+
+model SousApplication {
+  id                Int           @id @default(autoincrement())
+  nomSousApplication String
+  applicationId     Int
+  application       Application   @relation(fields: [applicationId], references: [id])
+  environnements    Environnement[]
+  composants       Composant[]
+
+  @@map("sous_applications")
+}
+
+model Environnement {
+  id                Int       @id @default(autoincrement())
+  typeEnvironnement String    // POC, DEV, REC, PPR, PRD
+  idOuvertureEnv    String    @unique
+  applicationId     Int
+  sousApplicationId Int?
+  application       Application @relation(fields: [applicationId], references: [id])
+  sousApplication   SousApplication? @relation(fields: [sousApplicationId], references: [id])
+  versions         VersionEnvironnement[]
+  composants       Composant[]
+  demandes         Demande[]
+  matriceFlux      MatriceFlux[]
+  affectationGroupes AffectationGroupe[]
+
+  @@map("environnements")
+}
+
+model VersionEnvironnement {
+  id              Int          @id @default(autoincrement())
+  environnementId Int
+  numeroVersion   Int
+  dateVersion     DateTime     @default(now())
+  typeAction      String       // creation, modification
+  commentaire     String?
+  utilisateurCreateur String
+  environnement   Environnement @relation(fields: [environnementId], references: [id])
+  modifications   Modification[]
+  demandes       Demande[]
+
+  @@map("versions_environnement")
+}
+
+model Demande {
+  id              Int       @id @default(autoincrement())
+  nomDemande      String    @unique
+  proprietaire    String
+  dateCreation    DateTime  @default(now())
+  environnementId Int
+  versionEnvId    Int
+  environnement   Environnement @relation(fields: [environnementId], references: [id])
+  versionEnv      VersionEnvironnement @relation(fields: [versionEnvId], references: [id])
+
+  @@map("demandes")
+}
+
+model Modification {
+  id                    Int       @id @default(autoincrement())
+  versionEnvId          Int
+  typeElement           String    // flux, composant, tier, groupe, affectation_groupe
+  idElementCible        Int
+  typeModification      String    // ajout, modification, suppression
+  champModifie         String?
+  idValeurAncienne     String?
+  idValeurNouvelle     String?
+  utilisateurModificateur String
+  dateModification      DateTime  @default(now())
+  versionEnv           VersionEnvironnement @relation(fields: [versionEnvId], references: [id])
+
+  @@map("modifications")
+}
+
+model Composant {
+  id                Int       @id @default(autoincrement())
+  environnementId   Int
+  typeComposantTiers String
+  nomComposant      String
+  nomNetworkGroupVra String
+  applicationId     Int
+  sousApplicationId Int?
+  environnement     Environnement @relation(fields: [environnementId], references: [id])
+  application       Application @relation(fields: [applicationId], references: [id])
+  sousApplication   SousApplication? @relation(fields: [sousApplicationId], references: [id])
+  tiers            Tier[]
+
+  @@map("composants")
+}
+
+model Tier {
+  id            Int       @id @default(autoincrement())
+  typeTier      String
+  zoneSecurite  String
+  optionVip     String
+  composantId   Int
+  composant     Composant @relation(fields: [composantId], references: [id])
+  groupes       Groupe[]
+
+  @@map("tiers")
+}
+
+model Groupe {
+  id            Int     @id @default(autoincrement())
+  groupeServeur String?
+  groupeVip     String?
+  groupeSnat    String?
+  tierId        Int
+  tier          Tier   @relation(fields: [tierId], references: [id])
+
+  @@map("groupes")
+}
+
+model AffectationGroupe {
+  id              Int       @id @default(autoincrement())
+  environnementId Int
+  groupeService   String
+  typeAffectation String
+  environnement   Environnement @relation(fields: [environnementId], references: [id])
+  groupesConsommateurs GroupeConsommateur[]
+
+  @@map("affectation_groupes")
+}
+
+model GroupeConsommateur {
+  id                 Int       @id @default(autoincrement())
+  nomGroupeConsommateur String
+  affectationId      Int
+  affectation        AffectationGroupe @relation(fields: [affectationId], references: [id])
+
+  @@map("groupe_consommateurs")
+}
+
+model MatriceFlux {
+  id               Int       @id @default(autoincrement())
+  sourceZone       String
+  sourceDesignation String
+  sourceGroupe     String
+  destZone         String
+  destDesignation  String
+  destGroupe       String
+  protocole        String
+  port             String
+  action           String
+  environnementId  Int
+  environnement    Environnement @relation(fields: [environnementId], references: [id])
+
+  @@map("matrice_flux")
+} 

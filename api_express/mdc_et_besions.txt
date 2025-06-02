@@ -1,0 +1,141 @@
+Modèle Conceptuel de Données (MCD)
+Gestion des demande d’ouverture flux
+
+APPLICATION
++ id_application (pk)
++ nom_application
++ nom_ressource_cloud
++ has_sous_app (boolean) 
+
+SOUS_APPLICATION
++ id_sous_application (pk)
++ nom_sous_application
++ id_application (fk) 
+
+ENVIRONNEMENT
++ id_environnement (pk)
++ id_application (fk)
++ id_sous_application (fk nullable)
++ type_environnement
++ id_ouverture_env (ak) 
+
+DEMANDE
++ id_demande (pk)
++ nom_demande (DOF-id_ouverture_env XXXX, ak)
++ proprietaire
++ date_creation
++ id_environnement (fk)
++ id_version_env (fk) 
+
+VERSION_ENVIRONNEMENT
++ id_version_env (pk)
++ id_environnement (fk)
++ numero_version (int, 0 à N)
++ date_version
++ type_action (enum: creation, modification)
++ commentaire
++ utilisateur_createur 
+
+MODIFICATION
++ id_modification (pk)
++ id_version_env (fk)
++ type_element (enum: flux, composant, tier, groupe, affectation_groupe)
++ id_element_cible (ID de l'élément modifié ou ajouté ou supprimé)
++ type_modification (enum: ajout, modification, suppression)
++ champ_modifie (nullable, utile uniquement pour "modification")
++ id_valeur_ancienne (nullable, référence à l’ancienne entité ou ligne historique)
++ id_valeur_nouvelle (nullable, référence à la nouvelle entité ou ligne créée)
++ utilisateur_modificateur
++ date_modification 
+
+COMPOSANT
++ id_composant (pk)
++ id_environnement (fk)
++ type_composant_tiers
++ nom_composant
++ nom_network_group_vra
++ id_application (fk)
++ id_sous_application (fk) 
+
+TIER
++ id_tier (pk)
++ type_tier
++ zone_securite
++ option_vip
++ id_composant (fk) 
+
+GROUPES
++ id_groupe (pk)
++ groupe_serveur
++ groupe_vip,
++ groupe_snat
++ id_tier (fk) 
+
+AFFECTATION_GROUPE
++ id_affectation (pk)
++ id_environnement 
++ groupe_service
++ type_affectation 
+
+GROUPE_CONSOMMATEUR
++ id_groupe_consommateur (pk)
++ nom_groupe_consommateur
++ id_affectation (fk) 
+
+MATRICE_FLUX
++ id_flux (pk)
++ source_zone
++ source_designation
++ source_groupe
++ dest_zone
++ dest_designation
++ dest_groupe
++ protocole
++ port
++ action
++ id_environnement (fk) 
+
+Notes explicatives:
+1. une application peut avoir plusieurs sous_application
+2. une application ou une sous application peut avoir plusieurs environnement
+3. un environnement concerne une application ou une sous application
+4. une demande est associée à un seul environnement
+5. une application ou sous_application peut avoir plusieurs environnement 
+6. un environnement peut avoir plusieurs composant
+7. un composant contient un ou plusieurs tier
+8. un tier peut a plusieurs groupes : Groupe serveur, Groupe VIP, Groupe SANAT
+9. un environnement peut avoir plusieurs affectation_groupe
+10. une affectation_groupe peut avoir plusieurs groupe_consommateur
+11. un environnement peut avoir plusieurs lignes dans matrice_flux
+12. un environnement peut avoir plusieurs version et a la version 0 à sa création
+13. toutes les modifications sur un environnement doivent être tracées, ce qui
+augment la version de l'environnement
+14. une création ou une modification d'un environnement est une demande ayant
+un numéro composé : 'DOF'- +id_ouverture_env + un nombre auto incrémentale (doit être unique) 
+15. une modification peut concerner ces actions : (ajout, modification, suppression)
+16. ces actions peuvent concerner : ligne de fux, affection groupe, un tier, un composant
+17. Pour tout un environnement modifié, donc sur la version récente, on doit savoir (marquer) le dernière modification (ligne de fux, affection groupe, un tier, un composant (nouveau, modifié, supprimé))18. pour toute modification on doit savoir : quoi, qui, quand, qu'est ce qui a été modifié (valeur ancienne et nouvelle valeur), qui l'a modifié (utilisateur) et quand il l'a modifié.
+
+Exemple demande : DOF-SOCGEG-SOUSAPP-PRD-01 (ouverture/création, modification, suppression) 
+Légende & Enumérations :
+les attributs tagué (table) seront des table dans la BDD car la liste n'est pas exhaustives
+- type_environnement (environnements ) : POC, DEV, REC, PPR, PRD
+- id_ouverture_env (non calculé mais renseigné):
+nom_ressource_cloud + nom_sous_application + type_environnement
+- types tier: application, présentation, base de données, nas
+- zones sécurité: STD, SEC-INT, SEC-EXT, TEC-INT, TEC-EXT, MGMT
+- type_composant_tiers : 1-tier, 2-tier, 3-tier
+- type_tier : Application, Présentation', Base de données, NAS
+- type_affectation dans affectation_groupe : auto, saisie
+- zones (source et destination) (table): 'Internet', 'Partenaires', 'Zone Publique', 'Zone Sécurisée Externe',
+        'Zone Sécurisée Interne', 'Zone Sécurisée Technique', 'Zone Serveurs Non Critiques',
+        'Zone Utilisateurs', 'DMZ Privée', 'LAN Serveurs', 'Zone de Management'
+- protocols (table): 'TCP', 'UDP', 'HTTP', 'HTTPS', 'CFT SFTP', 'CFT PeSIT-E', 'CFT PeSIT-E SSL', 'JMX', 'SQL'
+- ports (table):  '8080', '80', '3000', '443', 'SERVICE-CIFS-SLF', 'SERVICE-NFS-SLF',
+        'SERVICE-DB2-SLF', 'SERVICE-MySQL-SLF', 'SERVICE-ORACLE-SLF',
+        'SERVICE-POSTGRES-SLF', 'SERVICE-MONGODB-SLF', 'SERVICE-MSSQL-SLF',
+        '6321', '6330', '7330', '6002', 'GR-SERVICES-AD'
+- actions: 'Autoriser', 'Modifier', 'Fermer'
+
+
+
