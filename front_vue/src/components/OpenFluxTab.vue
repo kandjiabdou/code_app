@@ -36,8 +36,17 @@
         </v-col>
       </v-row>
 
-      <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="6000">
-        {{ snackbar.text }}
+      <v-snackbar 
+        v-model="snackbar.show" 
+        :color="snackbar.color" 
+        :timeout="snackbar.timeout"
+        location="top"
+        multi-line
+        :max-width="600"
+      >
+        <div style="white-space: pre-line; font-family: monospace;">
+          {{ snackbar.text }}
+        </div>
         <template v-slot:actions>
           <v-btn variant="text" @click="snackbar.show = false">Fermer</v-btn>
         </template>
@@ -146,20 +155,55 @@ export default {
           applicationId: application.id,
           sousApplicationId,
           composants: appForm.composants.map(comp => ({
-            ...comp,
+            typeComposantTiers: comp.type.toLowerCase(),
+            nomComposant: comp.nomComposant,
+            nomNetworkGroupVra: comp.nomNetworkGroupVRA,
+            tiers: comp.tiers.map(tier => ({
+              typeTier: tier.type,
+              zoneSecurite: tier.zoneSecurite,
+              optionVip: tier.optionVIP,
+              groups: tier.groups
+            })),
             applicationId: application.id,
             sousApplicationId
           })),
-          matriceFlux
+          matriceFlux: matriceFlux.map(flux => ({
+            sourceZone: flux.sourceZone,
+            sourceDesignation: flux.sourceDesignation,
+            sourceGroupe: flux.sourceGroup,
+            destZone: flux.destZone,
+            destDesignation: flux.destDesignation,
+            destGroupe: flux.destGroup,
+            protocole: flux.protocol,
+            port: flux.port,
+            action: flux.action
+          }))
         });
 
         // 4. Créer la demande
+        // Trouver la version d'environnement (la plus récente créée)
+        let versionEnvId = null;
+        if (environnement.VersionEnvironnements && environnement.VersionEnvironnements.length > 0) {
+          // Trier par numéro de version décroissant et prendre la première
+          const latestVersion = environnement.VersionEnvironnements.sort((a, b) => b.numeroVersion - a.numeroVersion)[0];
+          versionEnvId = latestVersion.id;
+        } else {
+          // Si pas de versions trouvées, essayer de récupérer l'environnement avec ses versions
+          const envWithVersions = await apiService.getEnvironnementById(environnement.id);
+          if (envWithVersions.VersionEnvironnements && envWithVersions.VersionEnvironnements.length > 0) {
+            const latestVersion = envWithVersions.VersionEnvironnements.sort((a, b) => b.numeroVersion - a.numeroVersion)[0];
+            versionEnvId = latestVersion.id;
+          } else {
+            throw new Error('Impossible de trouver une version pour cet environnement');
+          }
+        }
+
         const demande = await apiService.createDemande({
           nomDemande: appForm.nomDemandeOuverture,
           proprietaire: appForm.proprietaire,
           dateCreation: new Date(),
           environnementId: environnement.id,
-          versionEnvId: environnement.versions[0].id
+          versionEnvId: versionEnvId
         });
 
         this.showSnackbar('Demande créée avec succès !');
@@ -167,7 +211,76 @@ export default {
 
       } catch (error) {
         console.error('Erreur lors de la soumission:', error);
-        const errorMessage = error.message || 'Une erreur est survenue lors de la création de la demande';
+        
+        // Gestion des erreurs avec messages explicites de l'API
+        let errorMessage = 'Une erreur est survenue lors de la création de la demande';
+        
+        if (error.response?.data) {
+          const errorData = error.response.data;
+          
+          // Erreurs métier avec codes spécifiques
+          if (errorData.code) {
+            switch (errorData.code) {
+              case 'ENVIRONMENT_ALREADY_EXISTS':
+                errorMessage = `❌ ${errorData.error}\n\n${errorData.details}`;
+                if (errorData.existingEnvironment) {
+                  errorMessage += `\n\n📋 Environnement existant :\n• ID: ${errorData.existingEnvironment.id}\n• Type: ${errorData.existingEnvironment.typeEnvironnement}\n• Application: ${errorData.existingEnvironment.application}`;
+                  if (errorData.existingEnvironment.sousApplication) {
+                    errorMessage += `\n• Sous-application: ${errorData.existingEnvironment.sousApplication}`;
+                  }
+                }
+                break;
+                
+              case 'ID_OUVERTURE_ALREADY_EXISTS':
+                errorMessage = `❌ ${errorData.error}\n\n${errorData.details}`;
+                break;
+                
+              case 'APPLICATION_NOT_FOUND':
+              case 'SOUS_APPLICATION_NOT_FOUND':
+                errorMessage = `❌ ${errorData.error}\n\n${errorData.details}`;
+                if (errorData.availableSousApplications && errorData.availableSousApplications.length > 0) {
+                  errorMessage += `\n\n📋 Sous-applications disponibles :`;
+                  errorData.availableSousApplications.forEach(sa => {
+                    errorMessage += `\n• ${sa.nom} (ID: ${sa.id})`;
+                  });
+                }
+                break;
+                
+              case 'SOUS_APPLICATION_REQUIRED':
+                errorMessage = `⚠️ ${errorData.error}\n\n${errorData.details}`;
+                if (errorData.availableSousApplications && errorData.availableSousApplications.length > 0) {
+                  errorMessage += `\n\n📋 Sous-applications disponibles :`;
+                  errorData.availableSousApplications.forEach(sa => {
+                    errorMessage += `\n• ${sa.nom} (ID: ${sa.id})`;
+                  });
+                  errorMessage += `\n\n💡 Conseil : Sélectionnez une sous-application dans votre formulaire.`;
+                }
+                break;
+                
+              case 'NO_SOUS_APPLICATION_ALLOWED':
+                errorMessage = `⚠️ ${errorData.error}\n\n${errorData.details}\n\n💡 Conseil : Laissez le champ "Sous-application" vide.`;
+                break;
+                
+              case 'INCOMPLETE_FLUX_DATA':
+                errorMessage = `⚠️ ${errorData.error}\n\n${errorData.details}`;
+                break;
+                
+              default:
+                errorMessage = errorData.details || errorData.error || errorMessage;
+            }
+          } 
+          // Erreurs de validation génériques
+          else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+          // Erreurs de validation Sequelize
+          else if (errorData.errors && Array.isArray(errorData.errors)) {
+            errorMessage = '❌ Erreurs de validation :\n\n' + errorData.errors.map(err => `• ${err.message}`).join('\n');
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
         this.showSnackbar(errorMessage, 'error');
       } finally {
         this.loading = false;

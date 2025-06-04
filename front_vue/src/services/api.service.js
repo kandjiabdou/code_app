@@ -22,35 +22,39 @@ axiosInstance.interceptors.response.use(
 export const apiService = {
   // Applications
   async getAllApplications() {
-    const response = await axios.get(`${API_URL}/applications`);
-    return response.data;
+    return axiosInstance.get('/applications');
+  },
+
+  async searchApplications(query) {
+    return axiosInstance.get('/applications/search', {
+      params: { q: query }
+    });
+  },
+
+  async getApplicationComplete(applicationId) {
+    return axiosInstance.get(`/applications/${applicationId}/complete`);
   },
 
   async createApplication(applicationData) {
-    const response = await axios.post(`${API_URL}/applications`, applicationData);
-    return response.data;
+    return axiosInstance.post('/applications', applicationData);
   },
 
   // Sous-applications
   async getAllSousApplications() {
-    const response = await axios.get(`${API_URL}/sous-applications`);
-    return response.data;
+    return axiosInstance.get('/sous-applications');
   },
 
   async getSousApplicationsByApplicationId(applicationId) {
-    const response = await axios.get(`${API_URL}/sous-applications/by-application/${applicationId}`);
-    return response.data;
+    return axiosInstance.get(`/sous-applications/by-application/${applicationId}`);
   },
 
   async createSousApplication(sousApplicationData) {
-    const response = await axios.post(`${API_URL}/sous-applications`, sousApplicationData);
-    return response.data;
+    return axiosInstance.post('/sous-applications', sousApplicationData);
   },
 
   // Environnements
   async createEnvironnement(environnementData) {
-    const response = await axios.post(`${API_URL}/environnements`, environnementData);
-    return response.data;
+    return axiosInstance.post('/environnements', environnementData);
   },
 
   async getEnvironnementById(id) {
@@ -59,8 +63,7 @@ export const apiService = {
 
   // Demandes
   async createDemande(demandeData) {
-    const response = await axios.post(`${API_URL}/demandes`, demandeData);
-    return response.data;
+    return axiosInstance.post('/demandes', demandeData);
   },
 
   async getAllDemandes() {

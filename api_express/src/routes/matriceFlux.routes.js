@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const db = require('../models');
+const { Op } = require('sequelize');
 
 // Récupérer toutes les entrées de la matrice de flux
 router.get('/', async (req, res) => {
   try {
-    const matriceFlux = await prisma.matriceFlux.findMany({
-      include: {
-        environnement: true
-      }
+    const matriceFlux = await db.MatriceFlux.findAll({
+      include: [{
+        model: db.Environnement,
+        attributes: ['typeEnvironnement', 'idOuvertureEnv']
+      }]
     });
     res.json(matriceFlux);
   } catch (error) {
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
 router.get('/environnement/:environnementId', async (req, res) => {
   try {
     const { environnementId } = req.params;
-    const matriceFlux = await prisma.matriceFlux.findMany({
+    const matriceFlux = await db.MatriceFlux.findAll({
       where: {
         environnementId: parseInt(environnementId)
       }
@@ -34,6 +35,7 @@ router.get('/environnement/:environnementId', async (req, res) => {
 
 // Créer une nouvelle entrée dans la matrice de flux
 router.post('/', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const {
       sourceZone,
@@ -48,28 +50,30 @@ router.post('/', async (req, res) => {
       environnementId
     } = req.body;
 
-    const flux = await prisma.matriceFlux.create({
-      data: {
-        sourceZone,
-        sourceDesignation,
-        sourceGroupe,
-        destZone,
-        destDesignation,
-        destGroupe,
-        protocole,
-        port,
-        action,
-        environnementId: parseInt(environnementId)
-      }
-    });
+    const flux = await db.MatriceFlux.create({
+      sourceZone,
+      sourceDesignation,
+      sourceGroupe,
+      destZone,
+      destDesignation,
+      destGroupe,
+      protocole,
+      port,
+      action,
+      environnementId: parseInt(environnementId)
+    }, { transaction: t });
+
+    await t.commit();
     res.status(201).json(flux);
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
 
 // Mettre à jour une entrée de la matrice de flux
 router.put('/:id', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { id } = req.params;
     const {
@@ -84,35 +88,43 @@ router.put('/:id', async (req, res) => {
       action
     } = req.body;
 
-    const flux = await prisma.matriceFlux.update({
+    await db.MatriceFlux.update({
+      sourceZone,
+      sourceDesignation,
+      sourceGroupe,
+      destZone,
+      destDesignation,
+      destGroupe,
+      protocole,
+      port,
+      action
+    }, {
       where: { id: parseInt(id) },
-      data: {
-        sourceZone,
-        sourceDesignation,
-        sourceGroupe,
-        destZone,
-        destDesignation,
-        destGroupe,
-        protocole,
-        port,
-        action
-      }
+      transaction: t
     });
+
+    const flux = await db.MatriceFlux.findByPk(parseInt(id), { transaction: t });
+    await t.commit();
     res.json(flux);
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
 
 // Supprimer une entrée de la matrice de flux
 router.delete('/:id', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { id } = req.params;
-    await prisma.matriceFlux.delete({
-      where: { id: parseInt(id) }
+    await db.MatriceFlux.destroy({
+      where: { id: parseInt(id) },
+      transaction: t
     });
+    await t.commit();
     res.status(204).send();
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });

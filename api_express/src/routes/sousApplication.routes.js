@@ -1,17 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const db = require('../models');
+const { Op } = require('sequelize');
 
 // Récupérer toutes les sous-applications
 router.get('/', async (req, res) => {
   try {
-    const sousApplications = await prisma.sousApplication.findMany({
-      include: {
-        application: true,
-        environnements: true,
-        composants: true
-      }
+    const sousApplications = await db.SousApplication.findAll({
+      include: [
+        {
+          model: db.Application,
+          attributes: ['nomApplication', 'nomRessourceCloud']
+        },
+        {
+          model: db.Environnement,
+          include: [db.Composant]
+        }
+      ]
     });
     res.json(sousApplications);
   } catch (error) {
@@ -21,29 +26,33 @@ router.get('/', async (req, res) => {
 
 // Créer une nouvelle sous-application
 router.post('/', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { nomSousApplication, applicationId } = req.body;
 
     // Vérifier si l'application parent existe
-    const application = await prisma.application.findUnique({
-      where: { id: parseInt(applicationId) }
-    });
-
+    const application = await db.Application.findByPk(parseInt(applicationId));
     if (!application) {
-      return res.status(404).json({ error: "L'application parent n'existe pas" });
+      throw new Error("L'application parent n'existe pas");
     }
 
-    const sousApplication = await prisma.sousApplication.create({
-      data: {
-        nomSousApplication,
-        applicationId: parseInt(applicationId)
-      },
-      include: {
-        application: true
-      }
+    const sousApplication = await db.SousApplication.create({
+      nomSousApplication,
+      applicationId: parseInt(applicationId)
+    }, { transaction: t });
+
+    const sousApplicationComplete = await db.SousApplication.findByPk(sousApplication.id, {
+      include: [{
+        model: db.Application,
+        attributes: ['nomApplication', 'nomRessourceCloud']
+      }],
+      transaction: t
     });
-    res.status(201).json(sousApplication);
+
+    await t.commit();
+    res.status(201).json(sousApplicationComplete);
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
@@ -52,13 +61,17 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const sousApplication = await prisma.sousApplication.findUnique({
-      where: { id: parseInt(id) },
-      include: {
-        application: true,
-        environnements: true,
-        composants: true
-      }
+    const sousApplication = await db.SousApplication.findByPk(parseInt(id), {
+      include: [
+        {
+          model: db.Application,
+          attributes: ['nomApplication', 'nomRessourceCloud']
+        },
+        {
+          model: db.Environnement,
+          include: [db.Composant]
+        }
+      ]
     });
     if (!sousApplication) {
       return res.status(404).json({ message: 'Sous-application non trouvée' });
@@ -73,12 +86,14 @@ router.get('/:id', async (req, res) => {
 router.get('/by-application/:applicationId', async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const sousApplications = await prisma.sousApplication.findMany({
+    const sousApplications = await db.SousApplication.findAll({
       where: { applicationId: parseInt(applicationId) },
-      include: {
-        environnements: true,
-        composants: true
-      }
+      include: [
+        {
+          model: db.Environnement,
+          include: [db.Composant]
+        }
+      ]
     });
     res.json(sousApplications);
   } catch (error) {
@@ -88,31 +103,47 @@ router.get('/by-application/:applicationId', async (req, res) => {
 
 // Mettre à jour une sous-application
 router.put('/:id', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { id } = req.params;
     const { nomSousApplication } = req.body;
-    const sousApplication = await prisma.sousApplication.update({
+    
+    await db.SousApplication.update({
+      nomSousApplication
+    }, {
       where: { id: parseInt(id) },
-      data: { nomSousApplication },
-      include: {
-        application: true
-      }
+      transaction: t
     });
+
+    const sousApplication = await db.SousApplication.findByPk(parseInt(id), {
+      include: [{
+        model: db.Application,
+        attributes: ['nomApplication', 'nomRessourceCloud']
+      }],
+      transaction: t
+    });
+
+    await t.commit();
     res.json(sousApplication);
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
 
 // Supprimer une sous-application
 router.delete('/:id', async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { id } = req.params;
-    await prisma.sousApplication.delete({
-      where: { id: parseInt(id) }
+    await db.SousApplication.destroy({
+      where: { id: parseInt(id) },
+      transaction: t
     });
+    await t.commit();
     res.status(204).send();
   } catch (error) {
+    await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
