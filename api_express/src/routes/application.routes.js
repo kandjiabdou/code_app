@@ -10,21 +10,85 @@ router.get('/search', async (req, res) => {
     
     let whereClause = {};
     if (q && q.trim() !== '') {
+      const searchTerm = q.trim();
       whereClause = {
-        nomApplication: {
-          [Op.iLike]: `%${q.trim()}%`
-        }
+        [Op.or]: [
+          {
+            nomApplication: {
+              [Op.like]: `%${searchTerm}%`
+            }
+          },
+          {
+            nomRessourceCloud: {
+              [Op.like]: `%${searchTerm}%`
+            }
+          }
+        ]
       };
     }
 
     const applications = await db.Application.findAll({
       where: whereClause,
       attributes: ['id', 'nomApplication', 'nomRessourceCloud', 'hasSousApp'],
+      include: [
+        {
+          model: db.SousApplication,
+          attributes: ['id', 'nomSousApplication'],
+          required: false,
+          include: [{
+            model: db.Environnement,
+            attributes: ['id', 'typeEnvironnement']
+          }]
+        },
+        {
+          model: db.Environnement,
+          attributes: ['id', 'typeEnvironnement'],
+          where: {
+            sousApplicationId: null
+          },
+          required: false
+        }
+      ],
       limit: 10, // Limiter les résultats pour l'auto-complétion
       order: [['nomApplication', 'ASC']]
     });
 
-    res.json(applications);
+    // Transformer les données pour inclure les environnements disponibles
+    const formattedApplications = applications.map(app => {
+      const plainApp = app.get({ plain: true });
+      const allEnvironnements = ['POC', 'DEV', 'REC', 'PPR', 'PRD'];
+      
+      let result = {
+        id: plainApp.id,
+        nomApplication: plainApp.nomApplication,
+        nomRessourceCloud: plainApp.nomRessourceCloud,
+        hasSousApp: plainApp.hasSousApp,
+        sousApplications: [],
+        environnementsDisponibles: []
+      };
+
+      if (plainApp.hasSousApp && plainApp.SousApplications?.length > 0) {
+        // Application avec sous-applications
+        result.sousApplications = plainApp.SousApplications.map(sousApp => {
+          const environnementsExistants = sousApp.Environnements?.map(env => env.typeEnvironnement) || [];
+          return {
+            id: sousApp.id,
+            nomSousApplication: sousApp.nomSousApplication,
+            environnementsExistants,
+            environnementsDisponibles: allEnvironnements.filter(env => !environnementsExistants.includes(env))
+          };
+        });
+      } else {
+        // Application sans sous-applications
+        const environnementsExistants = plainApp.Environnements?.map(env => env.typeEnvironnement) || [];
+        result.environnementsDisponibles = allEnvironnements.filter(env => !environnementsExistants.includes(env));
+        result.environnementsExistants = environnementsExistants;
+      }
+
+      return result;
+    });
+
+    res.json(formattedApplications);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -131,10 +195,47 @@ router.get('/:id/complete', async (req, res) => {
 // Récupérer toutes les applications
 router.get('/', async (req, res) => {
   try {
-    const applications = await db.Application.findAll({
+    const { q } = req.query; // Paramètre de recherche
+    
+    let whereClause = {};
+    let sousAppWhereClause = {};
+    
+    if (q && q.trim() !== '') {
+      const searchTerm = q.trim();
+      
+      // Recherche dans les applications (nom application OU nom ressource cloud)
+      whereClause = {
+        [Op.or]: [
+          {
+            nomApplication: {
+              [Op.like]: `%${searchTerm}%`
+            }
+          },
+          {
+            nomRessourceCloud: {
+              [Op.like]: `%${searchTerm}%`
+            }
+          }
+        ]
+      };
+      
+      // Recherche dans les sous-applications
+      sousAppWhereClause = {
+        nomSousApplication: {
+          [Op.like]: `%${searchTerm}%`
+        }
+      };
+    }
+
+    // 1. Récupérer les applications qui matchent directement (nom app ou ressource cloud)
+    const directMatchApps = await db.Application.findAll({
+      where: whereClause,
+      limit: 10,
+      order: [['nomApplication', 'ASC']],
       include: [
         {
           model: db.SousApplication,
+          required: false, // LEFT JOIN pour inclure toutes les sous-apps
           include: [{
             model: db.Environnement,
             include: [
@@ -148,8 +249,6 @@ router.get('/', async (req, res) => {
                 limit: 1,
                 order: [['dateCreation', 'DESC']],
               },
-              db.Composant,
-              db.MatriceFlux
             ]
           }]
         },
@@ -170,15 +269,73 @@ router.get('/', async (req, res) => {
               limit: 1,
               order: [['dateCreation', 'DESC']],
             },
-            db.Composant,
-            db.MatriceFlux
           ]
         }
       ]
     });
 
+    // 2. Si on recherche et qu'on a encore de la place, chercher les applications avec sous-apps qui matchent
+    let sousAppMatchApps = [];
+    if (q && q.trim() !== '' && directMatchApps.length < 10) {
+      const directMatchAppIds = directMatchApps.map(app => app.id);
+      
+      sousAppMatchApps = await db.Application.findAll({
+        where: directMatchAppIds.length > 0 ? {
+          id: {
+            [Op.notIn]: directMatchAppIds
+          }
+        } : {},
+        limit: Math.max(0, 10 - directMatchApps.length),
+        order: [['nomApplication', 'ASC']],
+        include: [
+          {
+            model: db.SousApplication,
+            where: sousAppWhereClause,
+            required: true, // INNER JOIN pour n'avoir que les apps avec sous-apps correspondantes
+            include: [{
+              model: db.Environnement,
+              include: [
+                {
+                  model: db.VersionEnvironnement,
+                  limit: 1,
+                  order: [['numeroVersion', 'DESC']],
+                },
+                {
+                  model: db.Demande,
+                  limit: 1,
+                  order: [['dateCreation', 'DESC']],
+                },
+              ]
+            }]
+          },
+          {
+            model: db.Environnement,
+            where: {
+              sousApplicationId: null
+            },
+            required: false,
+            include: [
+              {
+                model: db.VersionEnvironnement,
+                limit: 1,
+                order: [['numeroVersion', 'DESC']],
+              },
+              {
+                model: db.Demande,
+                limit: 1,
+                order: [['dateCreation', 'DESC']],
+              },
+            ]
+          }
+        ]
+      });
+    }
+
+    // 3. Combiner les résultats
+    const allApplications = [...directMatchApps, ...sousAppMatchApps];
+
     // Transformer les données pour le format souhaité
-    const formattedApplications = applications.map(app => {
+    const formattedApplications = allApplications.map(app => {
       const plainApp = app.get({ plain: true });
       return {
         ...plainApp,

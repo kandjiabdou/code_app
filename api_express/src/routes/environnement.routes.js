@@ -18,27 +18,17 @@ router.get('/', async (req, res) => {
         },
         {
           model: db.VersionEnvironnement,
-          include: [{
-            model: db.Modification
-          }]
+          attributes: ['id', 'numeroVersion', 'typeAction', 'utilisateurCreateur', 'dateVersion']
         },
         {
           model: db.Composant,
           include: [{
             model: db.Tier,
-            include: [{
-              model: db.Groupe
-            }]
+            attributes: ['id', 'typeTier', 'zoneSecurite', 'optionVip']
           }]
         },
         {
           model: db.MatriceFlux
-        },
-        {
-          model: db.AffectationGroupe,
-          include: [{
-            model: db.GroupeConsommateur
-          }]
         }
       ]
     });
@@ -281,22 +271,26 @@ router.post('/', async (req, res) => {
         },
         {
           model: db.VersionEnvironnement,
-          include: [db.Modification]
+          attributes: ['id', 'numeroVersion', 'typeAction', 'utilisateurCreateur', 'dateVersion']
         },
         {
           model: db.Composant,
           include: [{
             model: db.Tier,
-            include: [db.Groupe]
+            attributes: ['id', 'typeTier', 'zoneSecurite', 'optionVip']
           }]
         },
-        db.MatriceFlux
+        {
+          model: db.MatriceFlux
+        }
       ]
     });
 
     res.status(201).json(environnementComplet);
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) {
+      await t.rollback();
+    }
     res.status(400).json({ error: error.message });
   }
 });
@@ -317,19 +311,17 @@ router.get('/:id', async (req, res) => {
         },
         {
           model: db.VersionEnvironnement,
-          include: [db.Modification]
+          attributes: ['id', 'numeroVersion', 'typeAction', 'utilisateurCreateur', 'dateVersion']
         },
         {
           model: db.Composant,
           include: [{
             model: db.Tier,
-            include: [db.Groupe]
+            attributes: ['id', 'typeTier', 'zoneSecurite', 'optionVip']
           }]
         },
-        db.MatriceFlux,
         {
-          model: db.AffectationGroupe,
-          include: [db.GroupeConsommateur]
+          model: db.MatriceFlux
         }
       ]
     });
@@ -386,7 +378,9 @@ router.put('/:id', async (req, res) => {
     });
     res.json(environnement);
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) {
+      await t.rollback();
+    }
     res.status(400).json({ error: error.message });
   }
 });
@@ -403,7 +397,9 @@ router.delete('/:id', async (req, res) => {
     await t.commit();
     res.status(204).send();
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) {
+      await t.rollback();
+    }
     res.status(400).json({ error: error.message });
   }
 });

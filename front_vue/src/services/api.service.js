@@ -21,8 +21,8 @@ axiosInstance.interceptors.response.use(
 
 export const apiService = {
   // Applications
-  async getAllApplications() {
-    return axiosInstance.get('/applications');
+  async getAllApplications(params = {}) {
+    return axiosInstance.get('/applications', { params });
   },
 
   async searchApplications(query) {
@@ -59,6 +59,10 @@ export const apiService = {
 
   async getEnvironnementById(id) {
     return axiosInstance.get(`/environnements/${id}`);
+  },
+
+  async updateEnvironnement(id, environnementData) {
+    return axiosInstance.put(`/environnements/${id}`, environnementData);
   },
 
   // Demandes

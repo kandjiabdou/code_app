@@ -11,7 +11,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     nomRessourceCloud: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: true
     },
     hasSousApp: {
       type: DataTypes.BOOLEAN,

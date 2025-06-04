@@ -99,60 +99,32 @@ export default {
         const appForm = this.$refs.openFluxAppRef.getDemandeDataForm();
         const matriceFlux = this.$refs.OpenFluxMatrice.getMaticeFlux();
 
-        // 1. Vérifier/Créer l'application
-        let application;
-        try {
-          // Rechercher l'application par son nom
-          const existingApps = await apiService.getAllApplications();
-          application = existingApps.find(app => 
-            app.nomApplication === appForm.nomApplication && 
-            app.nomRessourceCloud === appForm.nomRessourceCloud
-          );
-
-          if (!application) {
-            // Créer l'application si elle n'existe pas
-            application = await apiService.createApplication({
-              nomApplication: appForm.nomApplication,
-              nomRessourceCloud: appForm.nomRessourceCloud,
-              hasSousApp: !!appForm.nomSousApplication
-            });
-          }
-        } catch (error) {
-          console.error('Erreur lors de la vérification/création de l\'application:', error);
-          throw error;
+        // Vérifier qu'une application a été sélectionnée
+        const selectedApplicationData = this.$refs.openFluxAppRef.selectedApplicationData;
+        if (!selectedApplicationData) {
+          this.showSnackbar('Aucune application sélectionnée !', 'error');
+          return;
         }
 
-        // 2. Vérifier/Créer la sous-application si nécessaire
+        const applicationId = selectedApplicationData.id;
+
+        // Récupérer l'ID de la sous-application si sélectionnée
         let sousApplicationId = null;
         if (appForm.nomSousApplication) {
-          try {
-            // Rechercher la sous-application dans les sous-applications de l'application
-            const sousApplications = await apiService.getSousApplicationsByApplicationId(application.id);
-            const existingSousApp = sousApplications.find(sousApp => 
-              sousApp.nomSousApplication === appForm.nomSousApplication
-            );
-
-            if (existingSousApp) {
-              sousApplicationId = existingSousApp.id;
-            } else {
-              // Créer la sous-application si elle n'existe pas
-              const newSousApp = await apiService.createSousApplication({
-                nomSousApplication: appForm.nomSousApplication,
-                applicationId: application.id
-              });
-              sousApplicationId = newSousApp.id;
-            }
-          } catch (error) {
-            console.error('Erreur lors de la vérification/création de la sous-application:', error);
-            throw error;
+          const selectedSousAppId = this.$refs.openFluxAppRef.selectedSousApplication;
+          if (selectedSousAppId) {
+            sousApplicationId = selectedSousAppId;
+          } else {
+            this.showSnackbar('Sous-application sélectionnée mais ID non trouvé !', 'error');
+            return;
           }
         }
 
-        // 3. Créer l'environnement
+        // 1. Créer l'environnement
         const environnement = await apiService.createEnvironnement({
           typeEnvironnement: appForm.environnement,
           idOuvertureEnv: appForm.nomDemandeOuverture,
-          applicationId: application.id,
+          applicationId: applicationId,
           sousApplicationId,
           composants: appForm.composants.map(comp => ({
             typeComposantTiers: comp.type.toLowerCase(),
@@ -164,7 +136,7 @@ export default {
               optionVip: tier.optionVIP,
               groups: tier.groups
             })),
-            applicationId: application.id,
+            applicationId: applicationId,
             sousApplicationId
           })),
           matriceFlux: matriceFlux.map(flux => ({
@@ -180,7 +152,7 @@ export default {
           }))
         });
 
-        // 4. Créer la demande
+        // 2. Créer la demande
         // Trouver la version d'environnement (la plus récente créée)
         let versionEnvId = null;
         if (environnement.VersionEnvironnements && environnement.VersionEnvironnements.length > 0) {
@@ -206,8 +178,21 @@ export default {
           versionEnvId: versionEnvId
         });
 
-        this.showSnackbar('Demande créée avec succès !');
-        this.$emit('submit-success', { demande, environnement, application });
+        this.showSnackbar(
+          `✅ Demande créée avec succès !\n\n` +
+          `📋 Application : ${selectedApplicationData.nomApplication}\n` +
+          `☁️ Ressource Cloud : ${selectedApplicationData.nomRessourceCloud}\n` +
+          `${appForm.nomSousApplication ? `📦 Sous-application : ${appForm.nomSousApplication}\n` : ''}` +
+          `🌍 Environnement : ${appForm.environnement}\n` +
+          `🎯 ID Demande : ${demande.id}`
+        );
+        
+        this.$emit('submit-success', { 
+          demande, 
+          environnement, 
+          application: selectedApplicationData,
+          sousApplicationId 
+        });
 
       } catch (error) {
         console.error('Erreur lors de la soumission:', error);

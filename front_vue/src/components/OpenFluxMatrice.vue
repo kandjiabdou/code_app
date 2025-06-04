@@ -149,6 +149,12 @@ export default {
   components: {
     AutoExpandInput
   },
+  props: {
+    initialData: {
+      type: Array,
+      default: () => []
+    }
+  },
   data() {
     return {
       zones: [
@@ -169,6 +175,16 @@ export default {
       actions: ['Autoriser', 'Modifier', 'Fermer'],
       rows: []
     };
+  },
+  watch: {
+    initialData: {
+      handler(newData) {
+        if (newData && newData.length > 0) {
+          this.rows = [...newData];
+        }
+      },
+      immediate: true
+    }
   },
   methods: {
     getActionColor(action) {
@@ -213,7 +229,10 @@ export default {
     }
   },
   mounted() {
-    this.addRow(); // première ligne par défaut
+    // Ajouter une ligne par défaut seulement si pas de données initiales
+    if (!this.initialData || this.initialData.length === 0) {
+      this.addRow();
+    }
   }
 };
 </script>
